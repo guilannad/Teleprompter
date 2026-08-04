@@ -353,8 +353,8 @@
   }
   #tp-text.serif{ font-family:Georgia, "Times New Roman", serif; }
   #tp-text.mono{ font-family:var(--font-mono); }
-  #tp-text .w{ transition:color .08s linear, opacity .08s linear; opacity:.35; color:var(--char-color, inherit); }
-  #tp-text .w.said{ opacity:.55; }
+  #tp-text .w{ transition:color .08s linear, opacity .08s linear; opacity:.6; color:var(--char-color, inherit); }
+  #tp-text .w.said{ opacity:.8; }
   #tp-text .w.current{ opacity:1; color:var(--accent-amber); }
   #tp-text .w.b{ font-weight:700; }
   #tp-text .w.i{ font-style:italic; }
@@ -1472,12 +1472,12 @@ function buildDisplayDocument(){
   '#guide{position:absolute;left:0;right:0;height:2px;background:rgba(255,176,32,.55);z-index:2;}' +
   '#textContainer{position:absolute;left:50%;top:0;will-change:transform;}' +
   '#text{padding:50vh 40px 50vh;text-align:center;color:#fff;white-space:pre-wrap;}' +
-  '#text .w{opacity:.35;transition:color .08s linear, opacity .08s linear;color:var(--char-color, inherit);}' +
+  '#text .w{opacity:.7;transition:color .08s linear, opacity .08s linear;color:var(--char-color, inherit);}' +
   '#text .w.b{font-weight:700;}' +
   '#text .w.i{font-style:italic;}' +
   '#text .w.hl{background:rgba(255,176,32,.22);border-radius:4px;padding:0 3px;}' +
   '#text .w.cue{font-weight:700;text-transform:uppercase;letter-spacing:.02em;}' +
-  '#text .w.said{opacity:.55;}' +
+  '#text .w.said{opacity:.88;}' +
   '#text .w.current{opacity:1;color:#FFB020;}' +
   '#hud{position:fixed;top:10px;right:10px;z-index:10;display:flex;gap:6px;}' +
   '#hud button{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:14px;}' +
@@ -1536,7 +1536,7 @@ function buildDisplayDocument(){
   'window.addEventListener("message", function(ev){ var data=ev.data||{}; lastMsgTs=performance.now(); if(data.type==="init"){ buildWords(data.words||[]); statusText.textContent="CONECTADO AO OPERADOR"; dot.classList.add("live"); } else if(data.type==="sync"){ applySync(data.currentIndex, data.pct); } else if(data.type==="state"){ statusText.textContent = data.paused ? "PAUSADO" : "REPRODUZINDO"; } });' +
   'if(window.opener){ try{ window.opener.postMessage({type:"ready"}, "*"); }catch(e){} }' +
   'setInterval(function(){ if(performance.now()-lastMsgTs>3000){ dot.classList.remove("live"); statusText.textContent="SEM SINAL DO OPERADOR"; } }, 1000);' +
-  '(function loop(){ var diff=targetY-translateY; if(Math.abs(diff)<0.4){ translateY=targetY; } else { translateY += diff*0.4; } applyTransform(); requestAnimationFrame(loop); })();' +
+  '(function loop(ts){ if(!loop.last) loop.last=ts; var dt=Math.min(0.1,(ts-loop.last)/1000); loop.last=ts; var diff=targetY-translateY; if(Math.abs(diff)<0.3){ translateY=targetY; } else { translateY += diff*Math.min(1, dt*18); } applyTransform(); requestAnimationFrame(loop); })();' +
   '})();' + closeScript +
   '</body></html>';
 }
@@ -2041,9 +2041,9 @@ class TeleprompterEngine{
     const pct = Math.min(100, Math.max(0,(done/total)*100));
     tpProgressFill.style.width = pct + '%';
 
-    // manda a posição para o monitor do apresentador (throttlado a ~20fps)
-    this._displayFrameCounter = (this._displayFrameCounter||0) + 1;
-    if(this._displayFrameCounter % 3 === 0){ this.pushDisplaySync(pct); }
+    // manda a posição para o monitor do apresentador a cada frame (mensagem leve, sem custo perceptível)
+    // — throttle demais aqui é o que causava a rolagem "picada" no 2º monitor.
+    this.pushDisplaySync(pct);
 
     if(this.startTime){
       let elapsed = (performance.now()-this.startTime)/1000 - this.pausedAccum;
