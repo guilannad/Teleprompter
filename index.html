@@ -578,6 +578,12 @@
       <input type="color" id="s-bg" value="#000000">
     </div>
   </div>
+  <div class="field">
+    <label style="justify-content:flex-start; gap:8px;">
+      <input type="checkbox" id="s-charcolor" style="width:auto;"> Colorir texto por personagem
+    </label>
+    <div class="hint">Desligado = todo o texto fica branco (mais legível pra ler/gravar). Ligue só se quiser diferenciar visualmente quem fala o quê.</div>
+  </div>
 
   <h3>Espelhamento</h3>
   <div class="field">
@@ -703,6 +709,11 @@
         <div id="mic-meter"><div id="mic-meter-fill"></div><div id="mic-meter-gate"></div></div>
         <div id="mic-meter-hint">A barra verde mostra o nível captado. A linha vermelha é o limiar mínimo — fale e ajuste até a barra ultrapassar a linha com folga.</div>
       </div>
+      <div class="field" style="margin-bottom:0;">
+        <label style="justify-content:flex-start; gap:8px;">
+          <input type="checkbox" id="live-charcolor" style="width:auto;"> Colorir por personagem
+        </label>
+      </div>
     </div>
   </div>
 
@@ -750,7 +761,7 @@ const defaultSettings = {
   fontSize:48, fontFamily:'sans', width:760, align:'center',
   color:'#ffffff', bg:'#000000', mirror:'none',
   lang:'pt-BR', lookahead:2, speed:130, speedMouse:50, camera:false, mode:'voice',
-  windowWidthPct:100, windowHeightPct:100, micSensitivity:5
+  windowWidthPct:100, windowHeightPct:100, micSensitivity:5, charColorEnabled:false
 };
 
 let settings = store.getSettings();
@@ -1287,6 +1298,7 @@ function applySettingsToUI(){
   $('#s-speed').value = settings.speed; $('#v-speed').textContent = settings.speed+' wpm';
   $('#s-speedmouse').value = settings.speedMouse; $('#v-speedmouse').textContent = settings.speedMouse+' wpm';
   $('#s-camera').checked = !!settings.camera;
+  $('#s-charcolor').checked = !!settings.charColorEnabled;
   updateWpmBadge();
   setSeg('#seg-fontfamily', settings.fontFamily);
   setSeg('#seg-align', settings.align);
@@ -1323,6 +1335,7 @@ $('#s-fontsize').addEventListener('input', e=>{ settings.fontSize=+e.target.valu
 $('#s-width').addEventListener('input', e=>{ settings.width=+e.target.value; $('#v-width').textContent=settings.width+'px'; store.setSettings(settings); });
 $('#s-color').addEventListener('input', e=>{ settings.color=e.target.value; store.setSettings(settings); });
 $('#s-bg').addEventListener('input', e=>{ settings.bg=e.target.value; store.setSettings(settings); });
+$('#s-charcolor').addEventListener('change', e=>{ settings.charColorEnabled=e.target.checked; store.setSettings(settings); });
 $('#s-lang').addEventListener('change', e=>{ settings.lang=e.target.value; store.setSettings(settings); });
 $('#s-lookahead').addEventListener('input', e=>{ settings.lookahead=+e.target.value; $('#v-lookahead').textContent=['curta','média','longa'][settings.lookahead-1]; store.setSettings(settings); });
 $('#s-speed').addEventListener('input', e=>{ settings.speed=+e.target.value; $('#v-speed').textContent=settings.speed+' wpm'; updateWpmBadge(); store.setSettings(settings); updateStats(); });
@@ -1659,6 +1672,25 @@ class TeleprompterEngine{
     this.rawText = tmp.innerText || '';
   }
 
+  buildWordsHtml(){
+    let html = '';
+    this.words.forEach((w, i)=>{
+      if(w.breaksBefore>0) html += '<br>'.repeat(w.breaksBefore);
+      else if(i>0) html += ' ';
+      const cls = 'w' + (w.bold?' b':'') + (w.italic?' i':'') + (w.mark?' hl':'') + (w.cue?' cue':'') + (w.scene?' scene':'');
+      const style = (this.opts.charColorEnabled && w.charColor) ? ` style="--char-color:${w.charColor}"` : '';
+      html += `<span class="${cls}" data-i="${w.index}"${style}>${escapeHtml(w.raw)}</span>`;
+    });
+    return html;
+  }
+
+  toggleCharColor(enabled){
+    this.opts.charColorEnabled = enabled;
+    tpText.innerHTML = this.buildWordsHtml();
+    if(this.currentIndex>=0) this.scrollToCurrent();
+    if(sharedDisplayWindow && !sharedDisplayWindow.closed && displayReady) this.sendDisplayInit();
+  }
+
   render(){
     tpText.className = 'font-' + this.opts.fontFamily;
     tpText.classList.remove('serif','mono');
@@ -1678,15 +1710,7 @@ class TeleprompterEngine{
     if(this.opts.mirror==='v') tpTextContainer.style.transform = 'translate(-50%,0) scaleY(-1)';
     if(this.opts.mirror==='hv') tpTextContainer.style.transform = 'translate(-50%,0) scale(-1,-1)';
 
-    let wordsHtml = '';
-    this.words.forEach((w, i)=>{
-      if(w.breaksBefore>0) wordsHtml += '<br>'.repeat(w.breaksBefore);
-      else if(i>0) wordsHtml += ' ';
-      const cls = 'w' + (w.bold?' b':'') + (w.italic?' i':'') + (w.mark?' hl':'') + (w.cue?' cue':'') + (w.scene?' scene':'');
-      const style = w.charColor ? ` style="--char-color:${w.charColor}"` : '';
-      wordsHtml += `<span class="${cls}" data-i="${w.index}"${style}>${escapeHtml(w.raw)}</span>`;
-    });
-    tpText.innerHTML = wordsHtml;
+    tpText.innerHTML = this.buildWordsHtml();
 
     this.applyWindowSize();
     this.computeGapRanges();
@@ -1716,7 +1740,7 @@ class TeleprompterEngine{
   }
   sendDisplayInit(){
     if(sharedDisplayWindow && !sharedDisplayWindow.closed){
-      const words = this.words.map(w=>({ r:w.raw, b:w.breaksBefore||0, bo:!!w.bold, it:!!w.italic, hl:!!w.mark, cu:!!w.cue, cc:w.charColor||null, sc:!!w.scene }));
+      const words = this.words.map(w=>({ r:w.raw, b:w.breaksBefore||0, bo:!!w.bold, it:!!w.italic, hl:!!w.mark, cu:!!w.cue, cc:(this.opts.charColorEnabled ? (w.charColor||null) : null), sc:!!w.scene }));
       sharedDisplayWindow.postMessage({ type:'init', words }, '*');
       this.pushDisplayState();
     }
@@ -2269,10 +2293,17 @@ class TeleprompterEngine{
       this.updateGateThreshold();
       settings.micSensitivity = this.opts.micSensitivity; store.setSettings(settings);
     };
+    const cc = $('#live-charcolor');
+    cc.checked = !!this.opts.charColorEnabled;
+    this._onCharColor = (e)=>{
+      this.toggleCharColor(e.target.checked);
+      settings.charColorEnabled = e.target.checked; store.setSettings(settings);
+    };
     fs.addEventListener('input', this._onFontSize);
     ww.addEventListener('input', this._onWinWidth);
     wh.addEventListener('input', this._onWinHeight);
     ms.addEventListener('input', this._onMicSens);
+    cc.addEventListener('change', this._onCharColor);
     this.updateGateThreshold();
   }
 
@@ -2362,6 +2393,7 @@ class TeleprompterEngine{
     $('#live-winwidth').removeEventListener('input', this._onWinWidth);
     $('#live-winheight').removeEventListener('input', this._onWinHeight);
     $('#live-micsens').removeEventListener('input', this._onMicSens);
+    $('#live-charcolor').removeEventListener('change', this._onCharColor);
 
     tpLivePanel.classList.remove('open');
     tpStage.classList.remove('show');
